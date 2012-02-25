@@ -80,7 +80,6 @@ class HMMERPileUp(object):
                                                               unit.hmmFrom,
                                                               unit.hmmTo,
                                                               unit.bits)
-            self.__addGaps(seq.gaps)
             record = SeqRecord(seq, id=_id, description=desc)
             
             #Remove sequence if there is more 50% X in the string
@@ -89,6 +88,7 @@ class HMMERPileUp(object):
 				continue
 				
             self.records.append(record)
+            self.__addGaps(seq.gaps)
         
         if len(removedSequences) > 0:
             print "Removed sequences from %s:" % os.path.basename(self.resultsFile)
