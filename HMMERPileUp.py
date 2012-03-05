@@ -45,7 +45,7 @@ class HMMERPileUp(object):
         self.bitThreshold = 0.0
         self.refDB = None
         
-    def parse(self, bitThreshold = 0, align=True, gaps=True):
+    def parse(self, bitThreshold=0, percentX=0.5, align=True, gaps=True):
         """Search through all of the hits in the given hmmer3 output.
         Hits are stored into an HMMSequence object, which counts
         the gaps in each hit. All of the positions and lengths of the gaps are  stored into the
@@ -83,7 +83,7 @@ class HMMERPileUp(object):
             record = SeqRecord(seq, id=_id, description=desc)
             
             #Remove sequence if there is more 50% X in the string
-            if record.seq.count("X")>len(record.seq)/2:
+            if record.seq.count("X")/len(record.seq)>percentX:
 				removedSequences.append(record.description)
 				continue
 				
@@ -182,7 +182,7 @@ class HMMERPileUp(object):
 
         Parameters:
         name - string. Name to save the gap list. Optional.
-               If not included, name with the name of the results file ending wiht with "GAPS.txt"
+               If not included, name with the name of the results file ending with with -"GAP_List.txt"
         """
 
         if name is None:
@@ -297,7 +297,7 @@ class HMMSequence(MutableSeq):
         if z > 0:
             dashFront = "-"*z
             xFront = "X"*number_of_Xs
-        elif hmmFrom-1<seqFrom-1:
+        elif hmmFrom-1<=seqFrom-1:
             xFront = "X"*(hmmFrom-1) 
 
         # Determining if variable amino acids ("X") need to be added to the 

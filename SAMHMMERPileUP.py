@@ -7,10 +7,11 @@ import os, sys
 import getopt
 
 ref = ""
+percentX = 0.5
 
 def runHMMERPileUp(f):
     parser = HMMERPileUp(f)
-    parser.parse()
+    parser.parse(percentX=percentX)
     parser.addGapsToHMMSeqs()
     if not ref == "":
     	base = os.path.basename(f)
@@ -26,7 +27,7 @@ def runHMMERPileUp(f):
     parser.Write2File()
     
 def runSAMPileUp(f):
-    sam = SAMPileUp(os.path.splitext(f)[0])
+    sam = SAMPileUp(os.path.splitext(f)[0], percentX=percentX)
     sam.Write2File()
 
 def openDirectory(path, n=0):
@@ -44,7 +45,7 @@ def openDirectory(path, n=0):
 
 if __name__ == "__main__":
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "", ["path=", "ref="])
+        opts, args = getopt.getopt(sys.argv[1:], "", ["path=", "ref=", "percentX="])
     except getopt.GetoptError, err:
         # print help information and exit:
         print str(err) # will print something like "option -a not recognized"
@@ -59,6 +60,8 @@ if __name__ == "__main__":
             	raise RuntimeError("specified path doesn't exist")
         elif opt in ["--ref"]:
         	ref = arg
+        elif opt in ["--percentX"]:
+        	percentX = arg
         else:
             assert False, "unhandled option"
             

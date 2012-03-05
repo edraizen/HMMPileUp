@@ -8,12 +8,13 @@ from Bio import SeqIO
 from time import sleep
 
 class SAMPileUp(object):
-    def __init__(self, inFile, evalcutoff=0.0):
+    def __init__(self, inFile, evalcutoff=0.0, percentX=0.5):
         self.inFile = inFile
         self.distFile = "%s.dist" % inFile #Get HMM Length
         self.multFile = "%s.mult" % inFile #Get sequences
         self.hmmLength = None
         self.evalcutoff = evalcutoff
+        self.percentX = percentX
 
         #Import sequences from .mult file
         self.sequences = [] #MutableSequences(self.multFile)
@@ -118,7 +119,7 @@ class SAMPileUp(object):
 					lowers = 0      
 					
 			#Remove sequence if there is more 50% X in the string
-			if record.seq.count("X")>len(record.seq)/2:
+			if record.seq.count("X")/len(record.seq)>self.percentX:
 				removedSequences.append(record.decription)
 				del self.sequences[idx]
 				
