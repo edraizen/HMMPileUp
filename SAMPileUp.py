@@ -10,6 +10,7 @@ from time import sleep
 class SAMPileUp(object):
     def __init__(self, inFile, evalcutoff=0.0, percentX=0.5):
         self.inFile = inFile
+        self.refDB = None
         self.distFile = "%s.dist" % inFile #Get HMM Length
         self.multFile = "%s.mult" % inFile #Get sequences
         self.hmmLength = None
@@ -48,7 +49,7 @@ class SAMPileUp(object):
                 for seq in self.sequences:
                     seq.evalue = -2
                     if _id in seq.id:
-                        seq.description = "[score: %s bits]" % evalue
+                        seq.description = "[score: %s e-value]" % evalue
                         seq.evalue = float(evalue)
                         break
         print ""               
@@ -60,6 +61,7 @@ class SAMPileUp(object):
                   
         self.align()
         self.insertAllGaps()
+        self.printCysCount()
 
     def align(self):
 		#extract dashes and capital letters
@@ -119,12 +121,13 @@ class SAMPileUp(object):
 					lowers = 0      
 					
 			#Remove sequence if there is more 50% X in the string
-			if record.seq.count("X")/len(record.seq)>self.percentX:
+			if record.seq.count("X")/self.hmmLength>self.percentX:
 				removedSequences.append(record.decription)
 				del self.sequences[idx]
 				
 			record.seq = MutableSeq(realSeq)
 			record.seq.count
+			
 		if len(removedSequences) > 0:
 			print "Removed sequences from %s:" % os.path.basename(self.inFile)
 			for seq in removedSequences:
@@ -136,6 +139,14 @@ class SAMPileUp(object):
         for index, gap in enumerate(self.gap):
             if gap == 0: continue
             print str(index) + "\t" + str(gap)
+    
+    def printCysCount(self):
+    	out = "ranked_accession code\tnumber of Cys in match\n"
+    	for record in self.sequences:
+    		out += "%s\t%d\n" % (record.name, record.seq.count("C"))
+    	f = open("CysCount_%s"%os.path.basename(self.inFile), 'w')
+    	f.write(out)
+    	f.close()
 
     def insertAllGaps(self):
         """This method inserts the previously computed gaps starting at the
@@ -153,6 +164,37 @@ class SAMPileUp(object):
                     for i, j in enumerate(range(gap)):
                         record.seq.data.insert(index, "-")
                 index-=1
+                
+    def setRefDB(self, file):
+    	self.refDB = file
+    
+    def addGapsToRefData(self, name=None, format="fasta"):
+        """This method is where all of the gaps are inserted into
+        the reference data.
+
+        Parameters:
+        refData - string. path/to/refData.fasta. Accepts FASTA and other
+                  Biopython compatible formats.
+        name - string. Name to save the ref data, if not same name. Optional
+        format - string. Format of refData. Accepts FASTA and other
+               Biopython compatible formats. Optional if format is FASTA.
+        """
+        
+        if name is None:
+        	name = "RefData_%s.txt" % (os.path.basename(self.inFile))
+        
+        print self.refDB    
+        sequences = MutableSequences(self.refDB, format=format)
+        realGaps = self.gap[:]
+        realGaps.reverse()
+        for i, seq in enumerate(sequences):
+            seq.id = "%d_%s" % (i+1, seq.id)
+            for index, gap in enumerate(realGaps):
+                index = self.hmmLength-index-1
+                if gap == 0: continue
+                for i in range(gap):
+                    seq.seq.insert(index+1, "-")
+        SeqIO.write(sequences, name, format)
                         
     def Write2File(self, name=None, type="fasta"):
         """Save the hit sequences to any format

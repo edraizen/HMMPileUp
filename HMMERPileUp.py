@@ -83,7 +83,7 @@ class HMMERPileUp(object):
             record = SeqRecord(seq, id=_id, description=desc)
             
             #Remove sequence if there is more 50% X in the string
-            if record.seq.count("X")/len(record.seq)>percentX:
+            if record.seq.count("X")/self.hmmLength>percentX:
 				removedSequences.append(record.description)
 				continue
 				
@@ -203,6 +203,14 @@ class HMMERPileUp(object):
         for index, gap in enumerate(self.total_gaps):
             if gap == 0: continue
             print str(index) + "\t" + str(gap)
+            
+    def printCysCount(self):
+    	out = "ranked_accession code\tnumber of Cys in match\n"
+    	for record in self.records:
+    		out += "%s\t%d\n" % (record.id, record.seq.count("C"))
+    	f = open("CysCount_%s"%(os.path.splitext(os.path.basename(self.resultsFile))[0]), 'w')
+    	f.write(out)
+    	f.close()
 
 # Part Two -- Align the Hit sequence to the HMM model 
 # and Insert Gap positions from the HMM model

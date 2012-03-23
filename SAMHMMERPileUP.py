@@ -13,6 +13,7 @@ def runHMMERPileUp(f):
     parser = HMMERPileUp(f)
     parser.parse(percentX=percentX)
     parser.addGapsToHMMSeqs()
+    parser.printCysCount()
     if not ref == "":
     	base = os.path.basename(f)
     	name = os.path.splitext(base)[0]
@@ -29,6 +30,17 @@ def runHMMERPileUp(f):
 def runSAMPileUp(f):
     sam = SAMPileUp(os.path.splitext(f)[0], percentX=percentX)
     sam.Write2File()
+    if not ref == "":
+    	base = os.path.basename(f)
+    	name = os.path.splitext(base)[0]
+    	for refDB in os.listdir(ref):
+    		if not refDB.endswith(".fasta"): continue
+    		if os.path.splitext(refDB)[0] in name:
+    			sam.setRefDB(os.path.join(ref, refDB))
+    			break
+    	if sam.refDB is None:
+    		raise RuntimeError("No reference data at specified location")
+    	sam.addGapsToRefData()
 
 def openDirectory(path, n=0):
 	dir = os.listdir(path)
