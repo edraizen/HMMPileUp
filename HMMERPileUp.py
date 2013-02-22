@@ -42,38 +42,38 @@ class HMMERPileUp(object):
         self.hmmLength = 0
         self.records = []
         self.total_gaps = []
-        self.bitThreshold = 0.0
         self.refDB = None
-        
-    def parse(self, bitThreshold=0, percentX=0.5, align=True, gaps=True):
-        """Search through all of the hits in the given hmmer3 output.
-        Hits are stored into an HMMSequence object, which counts
-        the gaps in each hit. All of the positions and lengths of the gaps are  stored into the
-        parser to add into all of the hits. Information about the hit is
-        also saved, and will be turned into a FASTA header.
+
+    def run(self, percentX=0.5):
+        """Run the HMMER parser and insert X's and dashes based on the 
+        alignment and then adds the total gaps found in alignments to 
+        all of the sequences. Then it removes sequences whose sequences
+        contain more than percentX number of X's and dashes.
 
         Parameters:
-        bitThreshold - a floating point value. Ignore bits that are less than bitThreshold.
-        align - boolean. Enables alignment algorithm based on HMM values.
-                See HMMSequence.align() for more info.
-        gaps - boolean. Enables gap counting algorithm to create pileup.
-               See HMMSequence.determineGapPositions()
+        percentX - how many non sequence characters are allowed in the sequence
+            default is 0.5
+        """
+
+        self.parse()
+        self.addGapsToHMMSeqs()
+        self.removeSeqs(percentX)
+        
+    def parse(self):
+        """Search through all of the hits in the given hmmer3 output.
+        Hits are stored into an HMMSequence object, which counts
+        the gaps in each hit. All of the positions and lengths of the gaps 
+        are  stored into the parser to add into all of the hits. Information
+        about the hit is also saved, and will be turned into a FASTA header.
         """
         
         hmmFile = open(self.resultsFile)
         parsedHMM = HMM.parseHMMER3(hmmFile)
         self.hmmLength = int(parsedHMM.hmmLength)
         self.total_gaps = [0]*self.hmmLength
-        self.bitThreshold = bitThreshold
-        
-        removedSequences = []
         
         for unit in parsedHMM:
-            bits = unit.bits
-            if bits < bitThreshold:
-                continue
-
-            seq = HMMSequence(unit, self.hmmLength, align=align, gaps=gaps)
+            seq = HMMSequence(unit, self.hmmLength)
             _id = "%d_%s" % (len(self.records)+1, unit.name)
             desc = "%d-%d (HMM: %d-%d) [score: %0.1f bits]" % (unit.seqFrom,
                                                               unit.seqTo,
@@ -81,19 +81,8 @@ class HMMERPileUp(object):
                                                               unit.hmmTo,
                                                               unit.bits)
             record = SeqRecord(seq, id=_id, description=desc)
-            
-            #Remove sequence if there is more 50% X in the string
-            if record.seq.count("X")/self.hmmLength>percentX:
-				removedSequences.append(record.description)
-				continue
-				
-            self.records.append(record)
             self.__addGaps(seq.gaps)
-        
-        if len(removedSequences) > 0:
-            print "Removed sequences from %s:" % os.path.basename(self.resultsFile)
-            for seq in removedSequences:
-                print seq
+            self.records.append(record)
         
     def __addGaps(self, gaps):
         """Private method that adds the gaps from an HMMSequence
@@ -125,9 +114,7 @@ class HMMERPileUp(object):
         
         if name is None:
         	name = "RefData_%s.txt" % (os.path.basename(self.resultsFile))
-        #if self.bitThreshold>0.0:
-        #name = "%s_bitsThreshold_%d" % (".", self.bitThreshold)
-        print self.refDB    
+        
         sequences = MutableSequences(self.refDB, format=format)
         realGaps = self.total_gaps[:]
         realGaps.reverse()
@@ -147,16 +134,42 @@ class HMMERPileUp(object):
         
         for seq in self.records:
             seq.seq.insertAllGaps(self.total_gaps)
-        
+
+    def ReIndexSequences(self):
+        for i, record in enumerate(self.records):
+            record.id = "{}_{}".format(i+1, record.id.split("_", 1))
+
+    def removeSeqs(self, percentX=0.5):
+        #Remove sequence if there is more %percentX in the string
+        #BUG: float conv didn't work, fixed, but commented out to test previous results
+        minAAcount = percentX*self.hmmLength
+        tmpRecords = []
+        for record in self.records:
+            print len(str(record.seq))
+            nonSeqCharacters = str(record.seq).translate(None, "ACDEFGHIKLMNPQRSTVWY")
+            if nonSeqCharacters < minAAcount:
+                #Remove record, warn
+                print "Removed sequences from %s:" % os.path.basename(self.resultsFile)
+                print seq
+            else:
+                #Save record
+                tmpRecords.append(record)
+
+        self.records = tmpRecords
+        self.ReIndexSequences()
+
     def ignoreBitsBelow(self, bitThreshhold):
-        """Ignore bits below a certain threshhold. Not needed if supplied threshold as an input.
+        """Ignore bits below a certain threshhold.
 
         Parameters:
         bitThreshold - a floating point value. Ignore bits that are less than bitThreshold.
         """
-        for record in records:
+        tmpRecords = []
+        for record in self.records:
             if record.hmm.bits < threshold:
-                del record
+                tmpRecords.append(record)
+
+        self.records = tmpRecords
 
     def Write2File(self, name=None, type="fasta"):
         """Save the hit sequences to any format
@@ -227,7 +240,7 @@ class HMMSequence(MutableSeq):
     This object determines the gaps of the hmm and insert them into the sequence
     and saves all of the information from the HMM hit into the sequence."""
     
-    def __init__(self, unit, hmmLength, align=True, gaps=True):
+    def __init__(self, unit, hmmLength):
         """Intialise HMMSequence with the hmmer unit.
 
         Parameters:
@@ -243,10 +256,8 @@ class HMMSequence(MutableSeq):
         self.hmm = unit
         self.hmmLength = int(hmmLength)
         self.gaps = [0]*self.hmmLength
-        if align:
-            self.align()
-        if gaps:
-            self.determineGapPositions()
+        self.align()
+        self.determineGapPositions()
 
     def addToFront(self, seq):
         """Insert a sequence in front of this sequence.
@@ -314,17 +325,23 @@ class HMMSequence(MutableSeq):
         number_of_Xs_end = self.hmmLength - hmmTo
 
         # The original sequence length; SPA format includes this
-        lengthPattern = re.compile(r'(\d+)$')
-        res = lengthPattern.search(self.hmm.name)
-        seqLength = int(res.group(1)) #int(self.hmm.name.split("_")[-1])
-        distToSeqEnd = seqLength - seqTo
-        if distToSeqEnd >= number_of_Xs_end and number_of_Xs_end != self.hmmLength:
-            xEnd = 'X'*number_of_Xs_end
-        else:
-            if distToSeqEnd < number_of_Xs_end:
-                xEnd = 'X'*distToSeqEnd
-            dashEnd += "-"*(number_of_Xs_end-distToSeqEnd)
-
+        #lengthPattern = re.compile(r'(\d+)$')
+        #res = lengthPattern.search(self.hmm.name)
+        #seqLength = int(res.group(1))
+        #print "HMM NAme:", self.hmm.name
+        delimeter = "|" #Need to fix can be "_" or "|" or something else...
+        try:
+            seqLength = int(self.hmm.name.split(delimeter)[-1])
+            distToSeqEnd = seqLength - seqTo
+            if distToSeqEnd >= number_of_Xs_end and number_of_Xs_end != self.hmmLength:
+                xEnd = 'X'*number_of_Xs_end
+            else:
+                if distToSeqEnd < number_of_Xs_end:
+                    xEnd = 'X'*distToSeqEnd
+            	dashEnd += "-"*(number_of_Xs_end-distToSeqEnd)
+        except:
+        	pass
+        	
         begin = "%s%s" % (dashFront, xFront)
         end = "%s%s" % (xEnd, dashEnd)
         self.addToFront(begin)
@@ -365,9 +382,14 @@ class HMMSequence(MutableSeq):
         total_lower = sum(self.gaps)
         refIndex = self.hmmLength-1
         index = len(self.data)-1 #self.hmmLength-1
+        #print "len(self.gaps):", len(self.gaps)
         while index >=0:
             refIndex = index-(total_lower-sum(self.gaps[refIndex:]))
+            #print refIndex
+            #try:
             index -= self.gaps[refIndex]
+            #except:
+            #	break
             gap = gaps[refIndex]-self.gaps[refIndex]
             if gap>0:
                 self.insertDeletionsAfter(index, gap)
@@ -403,7 +425,7 @@ if __name__ == "__main__":
         sys.exit(2)
     
     parser = HMMERPileUp(hmmFile)
-    parser.parse(bitThreshold=bitThreshold)
+    parser.parse()
     if refData is not None:
     	parser.setRefDB(refData)
     	parser.addGapsToRefData()

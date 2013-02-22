@@ -11,8 +11,7 @@ percentX = 0.5
 
 def runHMMERPileUp(f):
     parser = HMMERPileUp(f)
-    parser.parse(percentX=percentX)
-    parser.addGapsToHMMSeqs()
+    parser.run(percentX=percentX)
     parser.printCysCount()
     if not ref == "":
     	base = os.path.basename(f)
@@ -73,7 +72,7 @@ if __name__ == "__main__":
         elif opt in ["--ref"]:
         	ref = arg
         elif opt in ["--percentX"]:
-        	percentX = arg
+        	percentX = float(arg)
         else:
             assert False, "unhandled option"
             

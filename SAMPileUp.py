@@ -118,21 +118,10 @@ class SAMPileUp(object):
 					record.gap[gap_index] = lowers
 					if self.gap[gap_index] < lowers:
 						self.gap[gap_index] = lowers
-					lowers = 0      
-					
-			#Remove sequence if there is more 50% X in the string
-			if record.seq.count("X")/self.hmmLength>self.percentX:
-				removedSequences.append(record.decription)
-				del self.sequences[idx]
+					lowers = 0
 				
 			record.seq = MutableSeq(realSeq)
 			record.seq.count
-			
-		if len(removedSequences) > 0:
-			print "Removed sequences from %s:" % os.path.basename(self.inFile)
-			for seq in removedSequences:
-				print seq
-		#self.printGaps()
 
     def printGaps(self):
         print "index\tgap length"
@@ -183,7 +172,6 @@ class SAMPileUp(object):
         if name is None:
         	name = "RefData_%s.txt" % (os.path.basename(self.inFile))
         
-        print self.refDB    
         sequences = MutableSequences(self.refDB, format=format)
         realGaps = self.gap[:]
         realGaps.reverse()
