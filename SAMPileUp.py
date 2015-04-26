@@ -1,228 +1,118 @@
+#!/usr/bin/python
+
+#SAMPileUp.py by Eli Draizen (edraizen@soe.ucsc.edu)
+
+## Expected input is an hmmscore file (in .mstat format) and a prettyalign  ##
+## (in .mult format) command line argument.  Output is a file containing   ##
+## FASTA formatted sequences from the hits that matched our HMMs including ##
+## insertions for variable amino acids (as X's) and gap positions (as -'s) ##
+
+# Modules from python standard
 import os, sys
 import re
 import getopt
+
+# Modules from Biopython
 from Bio.Seq import Seq, MutableSeq
 from Bio import SeqIO
-from Sequences import MutableSequences
-from Bio import SeqIO
-from time import sleep
+from Bio.SeqRecord import SeqRecord
 
-class SAMPileUp(object):
-    def __init__(self, inFile, evalcutoff=0.0, percentX=0.5):
-        self.inFile = inFile
-        self.refDB = None
-        self.distFile = "%s.dist" % inFile #Get HMM Length
-        self.multFile = "%s.mult" % inFile #Get sequences
-        self.hmmLength = None
-        self.evalcutoff = evalcutoff
-        self.percentX = percentX
+# Local modules
+from HMMPileUp import HMMPileUp, HMMSequence
 
-        #Import sequences from .mult file
-        self.sequences = [] #MutableSequences(self.multFile)
-        for seq in SeqIO.parse(self.multFile, "fasta"):
-            self.sequences.append(seq)
+class SAMPileUp(HMMPileUp):
+    def __init__(self, resultsFiles, reference_data, evalcutoff=0.0):
+        HMMPileUp.__init__(self, resultsFiles[0], evalcutoff)
+        self.mstatFile = resultsFiles[0] #Get HMM Length, evalues
+        self.multFile = resultsFiles[1] #Get sequences
+        self.resultsFiles = self.mstatFile
+        self.hmmLength = len(SeqIO.parse(reference_data, "fasta").next())
 
-        dist = open(self.distFile, "r")
+    def parse(self, percentX=None):
+        """
+        """
+        evalues = {}
         getEvalues = False
-        for i, line in enumerate(dist.readlines()):
-            try:
-                if line.split(",")[0].split(" ")[-1] == "sequences":
-                    self.hmmLength = int(line.split(", ")[2].split(" ")[0])
-                else:
-                    pass
-            except:
-                continue
-            if "% Sequence ID" in line:
-            	getEvalues = True
-            	print "Assigning evaules to sequences"
-                continue
-            if getEvalues:
-                sys.stdout.write("\r" + "."*(i%4))
-                sys.stdout.flush()
-                try:
-                    _id, length, simple, reversed, evalue = line.split()[:5]
-                except:
-                    #raise RuntimeError("Invalid mult file")
-                    break
-                if float(evalue)<self.evalcutoff:
+        with open(self.mstatFile) as mstat:
+            for i, line in enumerate(mstat):
+                if "% Sequence ID" in line:
+                    getEvalues = True
                     continue
-                for seq in self.sequences:
-                    seq.evalue = -2
-                    if _id in seq.id:
-                        seq.description = "[score: %s e-value]" % evalue
-                        seq.evalue = float(evalue)
-                        break
-        print ""               
-                        
-        dist.close()
+                if getEvalues:
+                    sys.stdout.write("\r" + "."*(i%4))
+                    sys.stdout.flush()
+                    try:
+                        _id, length, simple, _reversed, evalue = line.split()[:5]
+                    except:
+                        raise RuntimeError("Invalid mult file")
 
-        if self.hmmLength is None:
-            assert "Error! %s is not valid" % self.distFile
-                  
-        self.align()
-        self.insertAllGaps()
-        self.printCysCount()
+                    if float(evalue)<self.evalcutoff:
+                        continue
+                    evalues[_id] = float(evalue)
 
+        if self.hmmLength == 0:
+            raise RuntimeError("HMM Length cannot be be 0. Please check mstat file: {}".format(self.mstatFile))
+
+        self.total_gaps = [0]*self.hmmLength
+
+        #Assign evalues to sequences
+        seqIDregex = re.compile("^(.+\|([0-9]+))_([0-9]+):([0-9]+)$")
+        for i, seq in enumerate(SeqIO.parse(self.multFile, "fasta")):
+            header_match = seqIDregex.search(seq.id)
+            seqID = header_match.group(0)
+            origSeqLength = header_match.group(1)
+            seq = SAMSequence(seq.seq, self.hmmLength, origSeqLength)
+            seq.align()
+            seq.determineGapPositions()
+
+            seqFrom = header_match.group(2)
+            seqTo = header_match.group(3)
+            seq.evalue = evalues[seqID]
+
+            _id = "%d_%s" % (i+1, seqID)
+            desc = "{}-{} [evalue: {}; program=UCSC-SAM3.5]".format(seqFrom, seqTo, seq.evalue)
+
+            record = SeqRecord(seq, id=_id, description=desc)
+
+            #Update gaps for all sequences, even if not saved
+            self.updateGaps(seq.gaps)
+
+            if not percentX or not seq.skip(percentX):
+                self.records.append(record)
+
+class SAMSequence(HMMSequence):
+    seq_regex = re.compile('([a-z]*)(-*)([A-Z][A-Za-z\-]*[A-Z])(-*)([a-z]*)')
     def align(self):
-		#extract dashes and capital letters
-		#get rid of everything before upper and after
-		#lowercase in front number
-		#if lower case in middle it's an insertion
-		#if dash
-		#coutn dashes at start before uppercase
-		#count lower case before UPPER or DASH
-		#           0      1       2(count 1st)      3    4
-		#reg ex: ([a-z]*)(-*)([A-Z][A-Za-z\-]*[A-Z])(-*)([a-z]*)
-		# 1,2,3 count number
-		#[A-Z] in front and back make sure there are upper case
-	
-		self.gap=[0]*self.hmmLength
-		removedSequences = []
-		
-		for idx, record in enumerate(self.sequences):
-			seq = record.seq.tostring()
-			m = re.search('([a-z]*)(-*)([A-Z][A-Za-z\-]*[A-Z])(-*)([a-z]*)', seq)
-			frontLowers = m.groups(0)[0]
-			frontDashes = m.groups(1)[1]
-			matchedSeq = m.groups(1)[2]
-			endDashes = m.groups(1)[3]
-			endLowers = m.groups(1)[4]
-			testSeq = "%s%s%s" % (frontDashes, matchedSeq, endDashes)
-		  
-			#Append X's to beginning
-			if len(frontDashes)<=len(frontLowers):
-			    realSeq = "X"*len(frontDashes)
-			else:
-				realSeq = "-"*(len(frontDashes)-len(frontLowers))
-				realSeq += "X"*len(frontLowers)
-					
-			realSeq += matchedSeq
-	
-			#Append X's to end
-			if len(endDashes)<=len(endLowers):
-				realSeq += "X"*len(endDashes)
-			else:
-				realSeq += "X"*len(endLowers)
-				realSeq += "-"*(len(endDashes)-len(endLowers))
-	
-			lowers = 0
-			otherLetters = 0
-			record.gap = [0]*self.hmmLength
-			for i, c in enumerate(realSeq):
-				if c.islower():
-					lowers+=1
-				else:
-					otherLetters+=1
-				if not c.islower() and lowers>0:
-					gap_index = (otherLetters-1)
-					record.gap[gap_index] = lowers
-					if self.gap[gap_index] < lowers:
-						self.gap[gap_index] = lowers
-					lowers = 0
-				
-			record.seq = MutableSeq(realSeq)
-			record.seq.count
-
-    def printGaps(self):
-        print "index\tgap length"
-        for index, gap in enumerate(self.gap):
-            if gap == 0: continue
-            print str(index) + "\t" + str(gap)
-    
-    def printCysCount(self):
-    	out = "ranked_accession code\tnumber of Cys in match\n"
-    	for record in self.sequences:
-    		out += "%s\t%d\n" % (record.name, record.seq.count("C"))
-    	f = open("CysCount_%s"%os.path.basename(self.inFile), 'w')
-    	f.write(out)
-    	f.close()
-
-    def insertAllGaps(self):
-        """This method inserts the previously computed gaps starting at the
-        end of the sequence by reversing the list and recomputing.
-        """
-        for record in self.sequences:
-            total_lower = sum(record.gap)
-            refIndex = self.hmmLength-1
-            index = len(record.seq.data)-1
-            while index >=0:
-                refIndex = index-(total_lower-sum(record.gap[refIndex:]))
-                index -= record.gap[refIndex]
-                gap = self.gap[refIndex]-record.gap[refIndex]
-                if gap>0:
-                    for i, j in enumerate(range(gap)):
-                        record.seq.data.insert(index, "-")
-                index-=1
-                
-    def setRefDB(self, file):
-    	self.refDB = file
-    
-    def addGapsToRefData(self, name=None, format="fasta"):
-        """This method is where all of the gaps are inserted into
-        the reference data.
-
-        Parameters:
-        refData - string. path/to/refData.fasta. Accepts FASTA and other
-                  Biopython compatible formats.
-        name - string. Name to save the ref data, if not same name. Optional
-        format - string. Format of refData. Accepts FASTA and other
-               Biopython compatible formats. Optional if format is FASTA.
-        """
+        #extract dashes and capital letters
+        #get rid of everything before upper and after
+        #lowercase in front number
+        #if lower case in middle it's an insertion
+        #if dash
+        #coutn dashes at start before uppercase
+        #count lower case before UPPER or DASH
+        #           0      1       2(count 1st)      3    4
+        #reg ex: ([a-z]*)(-*)([A-Z][A-Za-z\-]*[A-Z])(-*)([a-z]*)
+        # 1,2,3 count number
+        #[A-Z] in front and back make sure there are upper case 
+        m = SAMSequence.seq_regex.search(str(self))
+        frontLowers = m.groups(0)[0]
+        frontDashes = m.groups(1)[1]
+        matchedSeq = m.groups(1)[2]
+        endDashes = m.groups(1)[3]
+        endLowers = m.groups(1)[4]
         
-        if name is None:
-        	name = "RefData_%s.txt" % (os.path.basename(self.inFile))
-        
-        sequences = MutableSequences(self.refDB, format=format)
-        realGaps = self.gap[:]
-        realGaps.reverse()
-        for i, seq in enumerate(sequences):
-            seq.id = "%d_%s" % (i+1, seq.id)
-            for index, gap in enumerate(realGaps):
-                index = self.hmmLength-index-1
-                if gap == 0: continue
-                for i in range(gap):
-                    seq.seq.insert(index+1, "-")
-        SeqIO.write(sequences, name, format)
-                        
-    def Write2File(self, name=None, type="fasta"):
-        """Save the hit sequences to any format
-        name - string. Name to save the ref data, if not same name.
-        type - string. Format of refData. Accepts FASTA and other
-        Biopython compatible formats. Optional if format is FASTA.
-        """
-        if name is None:
-            name = "%s_PILEUP.txt" % (os.path.basename(self.inFile))
-        
-        if name == "PF07422_seed_PILEUP.txt" or name == "PF04092_seed_PILEUP.txt" or os.path.exists(name):
-        	print "File name (%s) already exists. %s, %s"%(os.path.basename(self.inFile), os.path.splitext(os.path.basename(self.inFile))[0], name) 
-        	name=raw_input("Pick a new name:")
-        
-        tmp = []
-        for i, seq in enumerate(self.sequences):
-            tmp_seq = seq
-            if not seq.__class__.__name__ == "SeqRecord":
-                tmp_seq.seq = seq.seq.toseq()
-            tmp_seq.id = "%d_%s"%(i+1, tmp_seq.id)
-            tmp.append(tmp_seq)
-        SeqIO.write(tmp, name, type)
-
-if __name__ == "__main__":
-    try:
-        opts, args = getopt.getopt(sys.argv[1:], "", ["eVal="])
-    except getopt.GetoptError, err:
-        # print help information and exit:
-        print str(err) # will print something like "option -a not recognized"
-        sys.exit(2)
-        
-    evaluecutoff = 0.0
-    for opt, arg in opts:
-        if opt in ["--eVal"]:
-            evaluecutoff = float(arg)
+        #Append X's to beginning
+        if len(frontDashes)<=len(frontLowers):
+            begin = "X"*len(frontDashes)
         else:
-            assert False, "unhandled option"
-            
-    sam = SAMPileUp(sys.argv[1], evaluecutoff)
-    sam.Write2File()            
+            begin = "-"*(len(frontDashes)-len(frontLowers))
+            begin += "X"*len(frontLowers)
 
-            
+        #Append X's to end
+        if len(endDashes)<=len(endLowers):
+            end = "X"*len(endDashes)
+        else:
+            end = "X"*len(endLowers)
+            end += "-"*(len(endDashes)-len(endLowers))
 
+        self.data = MutableSeq("{}{}{}".format(begin, matchedSeq, end)).data
