@@ -1,6 +1,6 @@
 # HMMPileUP
 
-Perfrom HMMER and UCSC-SAM model mixtures, saving the the results into a pile up. The sequences that have scores above a given thershold are dispayed with the portions that aligned to the HMM. Unknowns are filled in with X's in the front and end if sequence started or ended in the middle of the hmm. Next, gaps are calculated for all positions of the hmm in each sequence, and are reinserted into all sequences as dashes with appropriate lengths to make sure they are aligned. This work was done in Dietlind L. Gerloff's Lab at UCSC (2010-2013) and updated April 2015 for our upcomming paper.
+Perform HMMER and UCSC-SAM model mixtures, saving the the results into a pile up. The sequences that have scores above a given thershold are dispayed with the portions that aligned to the HMM. Unknowns are filled in with X's in the front and end if sequence started or ended in the middle of the hmm. Next, gaps are calculated for all positions of the hmm in each sequence, and are reinserted into all sequences as dashes with appropriate lengths to make sure they are aligned. This work was done in Dietlind L. Gerloff's Lab at UCSC (2010-2013) and updated April 2015 for our upcomming paper.
 
 ## Requirements
 * python2.7
@@ -28,6 +28,7 @@ Optionally, you can filter results to ignore and sequences that have too many X'
 * Add examples
 
 ## Credits
-* Edward Liaw (@edliaw) - Author of Makefile/pipeline
 * Dietlind L. Gerloff
+* Edward Liaw (@edliaw) - Author of Makefile/pipeline
+* Felicia Kemp
 * Jonathan Magasin
