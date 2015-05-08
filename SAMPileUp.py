@@ -20,22 +20,47 @@ from Bio.SeqRecord import SeqRecord
 # Local modules
 from HMMPileUp import HMMPileUp, HMMSequence
 
-class SAMPileUp(HMMPileUp):
-    def __init__(self, resultsFiles, reference_data, evalcutoff=0.0):
-        HMMPileUp.__init__(self, resultsFiles[0], evalcutoff)
-        self.mstatFile = resultsFiles[0] #Get HMM Length, evalues
-        self.multFile = resultsFiles[1] #Get sequences
-        self.resultsFiles = self.mstatFile
-        self.hmmLength = len(SeqIO.parse(reference_data, "fasta").next())
+def is_sam_output_directory(path, files=False):
+    needed_files = ["{}.{}".format(path, ext) for ext in ("dist", "mstat", "mult")]
 
-    def parse(self, percentX=None):
+    if files:
+        return needed_files
+
+    return all(os.path.isfile(f) for f in needed_files)
+
+class SAMPileUp(HMMPileUp):
+    def __init__(self, resultsFiles, evalcutoff=0.0):
+        HMMPileUp.__init__(self, resultsFiles[0], evalcutoff)
+        self.distFile = resultsFiles[0] #Get HMM Length
+        self.mstatFile = resultsFiles[1] #Get e-values
+        self.multFile = resultsFiles[2] #Get sequences
+        self.resultsFiles = self.mstatFile
+
+    def get_hmm_length(self):
+        """Get HMM Length fro Dist file.
+        Match lines like:
+        % 264051 sequences, 157742148 residues, 124 nodes, 1834.71 seconds
+        """
+        nodes_re = re.compile(r', (\d+) nodes,')
+        with open(self.distFile) as dist:
+            for line in dist:
+                match = nodes_re.search(line)
+                if match:
+                    self.hmmLength = int(match.groups()[0])-1
+                    return
+        if self.hmmLength == 0:
+            raise RuntimeError("Invalid SAM HMM, with length 0. Please check {} is accurate.".format(self.distFile))
+
+    def parse(self):
         """
         """
+        self.get_hmm_length()
+
         evalues = {}
         getEvalues = False
         with open(self.mstatFile) as mstat:
             for i, line in enumerate(mstat):
-                if "% Sequence ID" in line:
+                if line.startswith("% Sequence ID"):
                     getEvalues = True
                     continue
                 if getEvalues:
@@ -45,13 +70,9 @@ class SAMPileUp(HMMPileUp):
                         _id, length, simple, _reversed, evalue = line.split()[:5]
                     except:
                         raise RuntimeError("Invalid mult file")
-
                     if float(evalue)<self.evalcutoff:
                         continue
                     evalues[_id] = float(evalue)
-
-        if self.hmmLength == 0:
-            raise RuntimeError("HMM Length cannot be be 0. Please check mstat file: {}".format(self.mstatFile))
 
         self.total_gaps = [0]*self.hmmLength
 
@@ -77,7 +98,7 @@ class SAMPileUp(HMMPileUp):
             #Update gaps for all sequences, even if not saved
             self.updateGaps(seq.gaps)
 
-            if not percentX or not seq.skip(percentX):
+            if not seq.skip():
                 self.records.append(record)
 
 class SAMSequence(HMMSequence):

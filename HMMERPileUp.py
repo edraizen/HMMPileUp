@@ -38,7 +38,7 @@ class HMMERPileUp(HMMPileUp):
     info of the hit into the FASTA header and optionally adds all of the gaps
     into the reference data."""
         
-    def parse(self, percentX=None):
+    def parse(self):
         """Search through all of the hits in the given hmmer3 output.
         Hits are stored into an HMMSequence object, which counts
         the gaps in each hit. All of the positions and lengths of the gaps 
@@ -69,10 +69,8 @@ class HMMERPileUp(HMMPileUp):
             #Update gaps for all sequences, even if not saved
             self.updateGaps(seq.gaps)
 
-            if not percentX or not seq.skip(percentX):
+            if not seq.skip():
                 self.records.append(record)
-            else:
-                print "    skipped"
 
 # Part Two -- Align the Hit sequence to the HMM model 
 # and Insert Gap positions from the HMM model
