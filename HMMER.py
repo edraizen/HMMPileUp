@@ -349,12 +349,15 @@ class HMMResultsIO:
     re_ga = re.compile(r'^([^\s]*);')
 
     def __init__(self):
-        pass
+        self.ids_below_threshold = []
     
     def parseHMMER3( self, fh ):
         hmmRes = HMMResults()
         self._readHeader( fh,  hmmRes )
         self._readSeqHits( fh, hmmRes )
+        for skip in self.ids_below_threshold:
+            print "   ", skip
+        print "READING UNIT HITS"
         self._readUnitHits( fh, hmmRes )
         self._readFooter( fh, hmmRes)
         return hmmRes
@@ -448,6 +451,7 @@ class HMMResultsIO:
             #raise FormatError( "Failed to parse %s in sequence section\n" % (line) )
 
     def _readSeqHits( self, hs, hmmRes ):
+        below_threshold = False
         while (1):
             line = hs.readline()
             if line is None:
@@ -462,7 +466,10 @@ class HMMResultsIO:
             res = re.search(r'^Domain annotation for each [sequence|model]', line)
             if res:
                 return
-                
+            res = re.search(r'inclusion threshold', line )
+            if res:
+                print "SKIPPING THOSE BELOW THRESHOLD"
+                below_threshold = True
             res = re.search( r'^\s+(E-value|---)', line )
             if res:
                 continue
@@ -480,17 +487,22 @@ class HMMResultsIO:
             desc = "-"
             if ( len(sMatch) >= 11 ):
                 desc = " ".join( sMatch[ 10: ] )
-            hmmRes.addHMMSeq(
-                HMMSequence(
-                        evalue     = float(sMatch[1]),
-                        bits       = float(sMatch[2]),
-                        bias       = float(sMatch[3]),
-                        exp        = float(sMatch[7]),
-                        numberHits = int(sMatch[8]),
-                        name       = sMatch[9],
-                        desc       = desc         
+
+            if not below_threshold:
+                print "adding", desc
+                hmmRes.addHMMSeq(
+                    HMMSequence(
+                            evalue     = float(sMatch[1]),
+                            bits       = float(sMatch[2]),
+                            bias       = float(sMatch[3]),
+                            exp        = float(sMatch[7]),
+                            numberHits = int(sMatch[8]),
+                            name       = sMatch[9],
+                            desc       = desc         
+                    )
                 )
-            )
+            else:
+                self.ids_below_threshold.append(sMatch[9])
             
     def _readUnitHits( self, hs, hmmRes ):
 #Parse the domain hits section
@@ -517,9 +529,15 @@ class HMMResultsIO:
             res = re.search( r'\>\>\s+(\S+)', line )
             if res:
                 seqId = res.group(1)
-                self._readUnitData( seqId, hs, hmmRes )
-                if hmmRes.eof:
-                    break
+                if seqId not in self.ids_below_threshold:
+                    print "ADDING", seqId
+                    self._readUnitData( seqId, hs, hmmRes )
+                    if hmmRes.eof:
+                        break
+                else:
+                    res = re.search( '^[(\/\/|Internal)]', line )
+                    if res:
+                        break
                 continue
             
 
@@ -573,24 +591,25 @@ class HMMResultsIO:
                 dMatch = re.split( r'\s+', string.rstrip(line) )
                 if len(dMatch) != 17:
                     raise FormatError( "Expected 16 elements of datam, got %d: %s " % (len(dMatch), line) )
-                units.append(
-                    HMMUnit(
-                        seqName   = seqName,
-                        name      = id,
-                        domain    = dMatch[1],
-                        bits      = float(dMatch[3]),
-                        bias      = dMatch[4],
-                        domEvalue = float(dMatch[5]),
-                        evalue    = float(dMatch[6]),
-                        hmmFrom   = int(dMatch[7]),
-                        hmmTo     = int(dMatch[8]),
-                        seqFrom   = int(dMatch[10]),
-                        seqTo     = int(dMatch[11]),
-                        envFrom   = int(dMatch[13]),
-                        envTo     = int(dMatch[14]),
-                        aliAcc    = dMatch[16]
+                if id not in self.ids_below_threshold:
+                    units.append(
+                        HMMUnit(
+                            seqName   = seqName,
+                            name      = id,
+                            domain    = dMatch[1],
+                            bits      = float(dMatch[3]),
+                            bias      = dMatch[4],
+                            domEvalue = float(dMatch[5]),
+                            evalue    = float(dMatch[6]),
+                            hmmFrom   = int(dMatch[7]),
+                            hmmTo     = int(dMatch[8]),
+                            seqFrom   = int(dMatch[10]),
+                            seqTo     = int(dMatch[11]),
+                            envFrom   = int(dMatch[13]),
+                            envTo     = int(dMatch[14]),
+                            aliAcc    = dMatch[16]
+                        )
                     )
-                )
                 continue
             raise FormatError( "Did not parse line: %s" % (line) );
 
@@ -608,7 +627,7 @@ class HMMResultsIO:
 #  P15498.4 617 LRLNPGDIVELTKAEAEqNWWEGRNTSTnEIGWFPCNRVKP 657
 #               7899**********9999*******************9987 PP
 
-        if (align):
+        if (align and id not in self.ids_below_threshold):
             pattern1 = None
             pattern2 = None
             if ( hmmName and hmmRes.program == 'hmmsearch'):

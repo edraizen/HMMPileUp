@@ -82,7 +82,7 @@ class SAMPileUp(HMMPileUp):
             header_match = seqIDregex.search(seq.id)
             seqID = header_match.group(0)
             origSeqLength = header_match.group(1)
-            seq = SAMSequence(seq.seq, self.hmmLength, origSeqLength)
+            seq = SAMSequence(seq.seq, self.hmmLength, origSeqLength, evalues[seqID])
             seq.align()
             seq.determineGapPositions()
 

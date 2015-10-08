@@ -17,7 +17,8 @@ import math
 
 # Modules from Biopython
 from Bio.SeqRecord import SeqRecord
-import HMMER as HMM #Must have SPA's biopython fork
+#import HMMER as HMM #Must have SPA's biopython fork
+from Bio import SearchIO
 
 # Local modules
 from HMMPileUp import HMMPileUp, HMMSequence
@@ -46,31 +47,42 @@ class HMMERPileUp(HMMPileUp):
         about the hit is also saved, and will be turned into a FASTA header.
         """
         print self.resultsFile
-        with open(self.resultsFile) as hmmFile:
-            parsedHMM = HMM.parseHMMER3(hmmFile)
 
-        self.hmmLength = int(parsedHMM.hmmLength)
+        try:
+            query = SearchIO.parse(self.resultsFile, "hmmer3-text").next()
+        except StopIteration:
+            raise RuntimeError("Invalid HMMER output")
+
+
+        self.hmmLength = query.seq_len
         self.total_gaps = [0]*self.hmmLength
+        num_hits = 0
+        for i, hit in enumerate(query):
+            #if not hit.is_included:
+                #Skip sequences below threshold
+                #continue
+            origSeqLength = int(hit.id.split("|")[-1])
+            for j, hsp in enumerate(hit):
+                num_hits += 1
+                seq = HMMERSequence(str(hsp.hit.seq), query.seq_len, origSeqLength, hsp.evalue)
+                seq.align(hsp.hit_start, hsp.hit_end, hsp.query_start, hsp.query_end)
+                seq.determineGapPositions()
+                _id = "{}_{}".format(num_hits, hit.id)
+                desc = "[Seq:{}-{}; HMM: {}-{}; e-value: {}; program={}]".format(
+                    hsp.hit_start,
+                    hsp.hit_end,
+                    hsp.query_start,
+                    hsp.query_end,
+                    hsp.evalue,
+                    query.program
+                    )
+                record = SeqRecord(seq, id=_id, description=desc)
 
-        for i, unit in enumerate(parsedHMM):
-            origSeqLength = int(unit.name.split("|")[-1])
-            seq = HMMERSequence(unit.hmmalign["seq"], self.hmmLength, origSeqLength)
-            seq.align(unit.seqFrom, unit.seqTo, unit.hmmFrom, unit.hmmTo)
-            seq.determineGapPositions()
-            _id = "%d_%s" % (i+1, unit.name)
-            desc = "[Seq:{}-{}; HMM: {}-{}; e-value: {}; program=hmmer3.1b1]".format(
-                unit.seqFrom,
-                unit.seqTo,
-                unit.hmmFrom,
-                unit.hmmTo,
-                unit.evalue)
-            record = SeqRecord(seq, id=_id, description=desc)
+                #Update gaps for all sequences, even if not saved
+                self.updateGaps(seq.gaps)
 
-            #Update gaps for all sequences, even if not saved
-            self.updateGaps(seq.gaps)
-
-            if not seq.skip():
-                self.records.append(record)
+                if not seq.skip() and hit.is_included:
+                    self.records.append(record)
 
 # Part Two -- Align the Hit sequence to the HMM model 
 # and Insert Gap positions from the HMM model

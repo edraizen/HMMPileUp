@@ -13,14 +13,14 @@ from subprocess import Popen, PIPE
 from HMMERPileUp import HMMERPileUp, is_hmmer_hmmsearch_file
 from SAMPileUp import SAMPileUp, is_sam_output_directory
 
-def run(files, reference_data, program="hmmer", filter_percentX=None, filter_spanX=None):
+def run(files, reference_data, program="hmmer", filter_percentX=None, filter_spanX=None, filter_percentChar=None, filter_evalue=None):
     if program == "hmmer":
         parser = HMMERPileUp(files[0])
     elif program == "sam":
         parser = SAMPileUp(files)
     else:
         raise RuntimeError("program must be 'hmmer' or 'sam'")
-    parser.run(filter_percentX=filter_percentX, filter_spanX=filter_spanX)
+    parser.run(filter_percentX=filter_percentX, filter_spanX=filter_spanX, filter_percentChar=filter_percentChar, filter_evalue=filter_evalue)
     parser.printCysCount()
     parser.addGapsToRefData(reference_data)    
     parser.Write2File()
@@ -29,7 +29,8 @@ def run(files, reference_data, program="hmmer", filter_percentX=None, filter_spa
 def getHMMOutputFromDirectory(path, n=0):
     for f in os.listdir(path):
         if os.path.isdir(os.path.join(path,f)) and n<=2:
-            openDirectory(os.path.join(path,f))
+            for f in getHMMOutputFromDirectory(os.path.join(path,f)):
+                yield f
         elif f.endswith("hmmer_hmmer.out") or f.endswith("sam_hmmer.out"):
             yield [os.path.join(path,f)], "hmmer"
         elif f.endswith(".mstat") and is_sam_output_directory(os.path.join(path, f)[:-6]):
@@ -64,6 +65,16 @@ def parse_args():
                         required=False,
                         default=None,
                         help="Remove sequences that have a given number of consecutinve X's as percent")
+    parser.add_argument("--filter_percentChar",
+                        type=float,
+                        required=False,
+                        default=None,
+                        help="Remove sequences that have have more then a given percentage of uppercase letters, not X")
+    parser.add_argument("--filter_evalue",
+                        type=float,
+                        required=False,
+                        default=None,
+                        help="Remove sequences with evalue >= to value")
  
     #Define output
     parser.add_argument("-o", "--outdir",
@@ -86,11 +97,14 @@ if __name__ == "__main__":
 
     print >> args.log, "Output from HMMPileUp.py"
     print >> args.log, "Run on", datetime.now()
-    print >> args.log, "Arguments:", ";".join(["{}={}".format(name, value) for name, value in args.__dict__.iteritems()])
+    print >> args.log, "Arguments:"
+    for name, value in args.__dict__.iteritems():
+        print >> args.log, "  {}={}".format(name, value) 
+    print >> args.log, ""
     
     if os.path.isdir(args.results):
         for files, program in getHMMOutputFromDirectory(args.results):
-            result = run(files, args.reference_data, program=program, filter_percentX=args.filter_percentX, filter_spanX=args.filter_spanX)
+            result = run(files, args.reference_data, program=program, filter_percentX=args.filter_percentX, filter_spanX=args.filter_spanX, filter_percentChar=args.filter_percentChar, filter_evalue=args.filter_evalue)
             print >> args.log, program, files[0]
             print >> args.log, "  Total sequences:", result.total_seqs
             print >> args.log, "  Saved sequences:", len(result.records)

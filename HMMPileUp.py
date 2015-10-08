@@ -1,5 +1,6 @@
 #Standard libraires
 import os
+import re
 from math import ceil, floor
 
 #Required libraires
@@ -10,6 +11,8 @@ from Bio.SeqRecord import SeqRecord
 class HMMPileUp(object):
     filter_percentX=None
     filter_spanX=None
+    filter_percentChar=None
+    filter_evalue=None
     total_seqs = 0
     def __init__(self, resultsFile, evalcutoff=0.0):
         self.resultsFile = resultsFile
@@ -18,7 +21,7 @@ class HMMPileUp(object):
         self.total_gaps = [0]*self.hmmLength
         self.records = []
 
-    def run(self, filter_percentX=None, filter_spanX=None):
+    def run(self, filter_percentX=None, filter_spanX=None, filter_percentChar=None, filter_evalue=None):
         """Run the HMM parser and insert X's and dashes based on the 
         alignment and then adds the total gaps found in alignments to 
         all of the sequences. Then it removes sequences whose sequences
@@ -31,6 +34,8 @@ class HMMPileUp(object):
         #Set global parameters, so subclasses son't have to deal with them
         HMMPileUp.filter_percentX = filter_percentX
         HMMPileUp.filter_spanX = filter_spanX
+        HMMPileUp.filter_percentChar = filter_percentChar
+        HMMPileUp.filter_evalue = filter_evalue
 
         self.parse()
         self.addGapsToHMMSeqs()
@@ -80,7 +85,7 @@ class HMMPileUp(object):
         
         reference_seqs = []
         for s in SeqIO.parse(refDB, file_format):
-            s.seq = HMMSequence(str(s.seq), self.hmmLength, self.hmmLength)
+            s.seq = HMMSequence(str(s.seq), self.hmmLength, self.hmmLength, 0)
             s.seq.insertAllGaps(self.total_gaps)
             reference_seqs.append(s)
 
@@ -132,7 +137,7 @@ class HMMSequence(MutableSeq):
 
     Must subclass to work with different HMM profile packages."""
     
-    def __init__(self, sequence, hmmLength, origSeqLength):
+    def __init__(self, sequence, hmmLength, origSeqLength, evalue):
         """Intialise HMMSequence with the hmmer unit. Must run align and 
         determineGapPositions.
 
@@ -147,6 +152,7 @@ class HMMSequence(MutableSeq):
         self.hmmLength = int(hmmLength)
         self.gaps = [0]*self.hmmLength
         self.origSeqLength = origSeqLength
+        self.evalue = evalue
         HMMPileUp.total_seqs += 1
         MutableSeq.__init__(self, sequence)
 
@@ -175,9 +181,17 @@ class HMMSequence(MutableSeq):
         of the total hmm length and the number of consecuative X's is less than 
         to half of the given fraction of the hmm length
         """
-        percentFilter = (HMMPileUp.filter_percentX is not None and self.count("X") > ceil(HMMPileUp.filter_percentX*len(self)))
-        spanFilter = (HMMPileUp.filter_spanX is not None and self.count("X"*int(floor(.5*HMMPileUp.filter_spanX*self.hmmLength))))
-        return percentFilter or spanFilter
+        percentXFilter = (HMMPileUp.filter_percentX is not None and \
+            self.count("X") >= ceil(HMMPileUp.filter_percentX*self.hmmLength))
+        spanXFilter = (HMMPileUp.filter_spanX is not None and \
+            self.count("X"*int(floor(HMMPileUp.filter_spanX*self.hmmLength))))
+        percentCharFilter = (HMMPileUp.filter_percentChar is not None and \
+            sum(1 for c in str(self) if c.isupper() and c != "X") <= \
+                ceil(HMMPileUp.filter_percentChar*self.hmmLength))
+        percentEvalueFilter = (HMMPileUp.filter_evalue is not None and \
+            self.evalue > HMMPileUp.filter_evalue)
+        print self.evalue, HMMPileUp.filter_evalue, percentEvalueFilter
+        return percentXFilter or spanXFilter or percentCharFilter or percentEvalueFilter
 
     def insertDeletionsAfter(self, index, deletions):
         """
