@@ -58,14 +58,15 @@ class SAMPileUp(HMMPileUp):
 
         evalues = {}
         getEvalues = False
+        program = "SAM"
         with open(self.mstatFile) as mstat:
             for i, line in enumerate(mstat):
+                if line.startswith("% SAM"):
+                    program = line[1:].rstrip()
                 if line.startswith("% Sequence ID"):
                     getEvalues = True
                     continue
                 if getEvalues:
-                    sys.stdout.write("\r" + "."*(i%4))
-                    sys.stdout.flush()
                     try:
                         _id, length, simple, _reversed, evalue = line.split()[:5]
                     except:
@@ -78,20 +79,27 @@ class SAMPileUp(HMMPileUp):
 
         #Assign evalues to sequences
         seqIDregex = re.compile("^(.+\|([0-9]+))_([0-9]+):([0-9]+)$")
-        for i, seq in enumerate(SeqIO.parse(self.multFile, "fasta")):
-            header_match = seqIDregex.search(seq.id)
-            seqID = header_match.group(0)
-            origSeqLength = header_match.group(1)
-            seq = SAMSequence(seq.seq, self.hmmLength, origSeqLength, evalues[seqID])
+        for i, s in enumerate(SeqIO.parse(self.multFile, "fasta")):
+            header_match = seqIDregex.search(s.id)
+            seqID = header_match.groups()[0]
+            origSeqLength = header_match.groups()[1]
+            seq = SAMSequence(s.seq, self.hmmLength, origSeqLength, evalues[s.id])
             seq.align()
             seq.determineGapPositions()
 
-            seqFrom = header_match.group(2)
-            seqTo = header_match.group(3)
-            seq.evalue = evalues[seqID]
+            seqFrom = header_match.groups()[2]
+            seqTo = header_match.groups()[3]
 
             _id = "%d_%s" % (i+1, seqID)
-            desc = "{}-{} [evalue: {}; program=UCSC-SAM3.5]".format(seqFrom, seqTo, seq.evalue)
+            _id = "{}_{}".format(i+1, seqID)
+            desc = "[Seq:{}-{}; HMM: {}-{}; e-value: {}; program={}]".format(
+                    seqFrom,
+                    seqTo,
+                    seq.hmm_start,
+                    seq.hmm_end,
+                    seq.evalue,
+                    program
+                    )
 
             record = SeqRecord(seq, id=_id, description=desc)
 
@@ -135,5 +143,8 @@ class SAMSequence(HMMSequence):
         else:
             end = "X"*len(endLowers)
             end += "-"*(len(endDashes)-len(endLowers))
+
+        self.hmm_start = frontLowers
+        self.hmm_end = len(self)-len(endLowers)+1
 
         self.data = MutableSeq("{}{}{}".format(begin, matchedSeq, end)).data

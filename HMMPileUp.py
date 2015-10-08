@@ -99,7 +99,6 @@ class HMMPileUp(object):
                Biopython compatible formats. Optional if format is FASTA.
         """
         if name is None:
-            print os.path.basename(self.resultsFile)
             name = "{}_PILEUP.txt".format(os.path.splitext(os.path.basename(self.resultsFile))[0])
         
         if sequences is None:
@@ -190,7 +189,7 @@ class HMMSequence(MutableSeq):
                 ceil(HMMPileUp.filter_percentChar*self.hmmLength))
         percentEvalueFilter = (HMMPileUp.filter_evalue is not None and \
             self.evalue > HMMPileUp.filter_evalue)
-        print self.evalue, HMMPileUp.filter_evalue, percentEvalueFilter
+
         return percentXFilter or spanXFilter or percentCharFilter or percentEvalueFilter
 
     def insertDeletionsAfter(self, index, deletions):

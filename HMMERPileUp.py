@@ -14,10 +14,12 @@ import sys, os
 import getopt
 import re
 import math
+import warnings
 
 # Modules from Biopython
+from Bio import BiopythonExperimentalWarning
+warnings.simplefilter('ignore', BiopythonExperimentalWarning)
 from Bio.SeqRecord import SeqRecord
-#import HMMER as HMM #Must have SPA's biopython fork
 from Bio import SearchIO
 
 # Local modules
@@ -46,7 +48,6 @@ class HMMERPileUp(HMMPileUp):
         are  stored into the parser to add into all of the hits. Information
         about the hit is also saved, and will be turned into a FASTA header.
         """
-        print self.resultsFile
 
         try:
             query = SearchIO.parse(self.resultsFile, "hmmer3-text").next()
