@@ -65,12 +65,21 @@ class HMMERPileUp(HMMPileUp):
             origSeqLength = int(hit.id.split("|")[-1])
             for j, hsp in enumerate(hit):
                 num_hits += 1
-                seq = HMMERSequence(str(hsp.hit.seq), query.seq_len, origSeqLength, hsp.evalue)
+                seq = HMMERSequence(
+                    str(hsp.hit.seq), 
+                    query.seq_len, 
+                    origSeqLength, 
+                    hsp.evalue,
+                    hsp.hit_start, 
+                    hsp.hit_end, 
+                    hsp.query_start, 
+                    hsp.query_end
+                    )
                 seq.align(hsp.hit_start, hsp.hit_end, hsp.query_start, hsp.query_end)
                 seq.determineGapPositions()
                 _id = "{}_{}".format(num_hits, hit.id)
                 desc = "[Seq:{}-{}; HMM: {}-{}; e-value: {}; program={}]".format(
-                    hsp.hit_start,
+                    hsp.hit_start+1,
                     hsp.hit_end,
                     hsp.query_start,
                     hsp.query_end,
@@ -96,7 +105,7 @@ class HMMERPileUp(HMMPileUp):
 # HIGHEST gap length value for that position.
  
 class HMMERSequence(HMMSequence):
-    def align(self, seqFrom, seqTo, hmmFrom, hmmTo):
+    def align(self):
         """Add gaps and unknowns to this HMM sequence based
         on information of this HMM hit
         """
@@ -108,17 +117,17 @@ class HMMERSequence(HMMSequence):
 
         # Determining if variable amino acids ("X") need to be added to the
 	    # beginning of the sequence:
-        z = hmmFrom-seqFrom
-        number_of_Xs = (hmmFrom-1)-z
+        z = self.hmmStart-self.seqStart
+        number_of_Xs = (self.hmmStart-1)-z
         if z > 0:
             dashFront = "-"*z
             xFront = "X"*number_of_Xs
-        elif hmmFrom-1<=seqFrom-1:
-            xFront = "X"*(hmmFrom-1) 
+        elif self.hmmStart-1<=self.seqStart-1:
+            xFront = "X"*(self.hmmStart-1) 
 
         # Determining if variable amino acids ("X") need to be added to the 
         # end of the sequence:
-        number_of_Xs_end = self.hmmLength - hmmTo
+        number_of_Xs_end = self.hmmLength - self.hmmEnd
 
         # The original sequence length; SPA format includes this
         delimeter = "|" #Need to fix can be "_" or "|" or something else...

@@ -136,7 +136,7 @@ class HMMSequence(MutableSeq):
 
     Must subclass to work with different HMM profile packages."""
     
-    def __init__(self, sequence, hmmLength, origSeqLength, evalue):
+    def __init__(self, sequence, hmmLength, origSeqLength, evalue, seqStart=None, seqEnd=None, hmmStart=None, hmmEnd=None):
         """Intialise HMMSequence with the hmmer unit. Must run align and 
         determineGapPositions.
 
@@ -152,6 +152,10 @@ class HMMSequence(MutableSeq):
         self.gaps = [0]*self.hmmLength
         self.origSeqLength = origSeqLength
         self.evalue = evalue
+        self.seqStart = seqStart
+        self.seqEnd = seqEnd
+        self.hmmStart = hmmStart
+        self.hmmEnd = hmmEnd
         HMMPileUp.total_seqs += 1
         MutableSeq.__init__(self, sequence)
 

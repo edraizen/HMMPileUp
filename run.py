@@ -10,21 +10,37 @@ from datetime import datetime
 from subprocess import Popen, PIPE
 
 #Custom libraries
+from HMMPipeline import HMMPipeline
 from HMMERPileUp import HMMERPileUp, is_hmmer_hmmsearch_file
 from SAMPileUp import SAMPileUp, is_sam_output_directory
 
 def run(files, reference_data, program="hmmer", filter_percentX=None, filter_spanX=None, filter_percentChar=None, filter_evalue=None):
-    if program == "hmmer":
+    if program == "hmmer" and isinstance(files, [[], ()]):
         parser = HMMERPileUp(files[0])
-    elif program == "sam":
+    elif program == "hmmer" and isinstance(files, str):
+        parser = HMMERPileUp(files)
+    elif program == "sam" and isinstance(files, [[], ()]):
         parser = SAMPileUp(files)
     else:
-        raise RuntimeError("program must be 'hmmer' or 'sam'")
+        raise RuntimeError("program must be 'hmmer' (with 1 file) or 'sam' with (3 files)")
     parser.run(filter_percentX=filter_percentX, filter_spanX=filter_spanX, filter_percentChar=filter_percentChar, filter_evalue=filter_evalue)
-    parser.printCysCount()
+    #parser.printCysCount()
     parser.addGapsToRefData(reference_data)    
-    parser.Write2File()
+    #parser.Write2File()
     return parser
+
+def run_with_hmm(reference_data, database, filter_percentX=None, filter_spanX=None, filter_percentChar=None, filter_evalue=None):
+    for (train, search), files in HMMPipeline.run(reference_data, database):
+        result = run(
+            files, 
+            args.reference_data, 
+            program=search, 
+            filter_percentX=args.filter_percentX, 
+            filter_spanX=args.filter_spanX, 
+            filter_percentChar=args.filter_percentChar, 
+            filter_evalue=args.filter_evalue
+            )
+        yield (train, search), result
 
 def getHMMOutputFromDirectory(path, n=0):
     for f in os.listdir(path):
@@ -91,9 +107,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-
-    if args.database:
-        raise RuntimeError("Error: cannot run pipline internally yet. Please run manually by editting the Makefile with correct parameters, and rerunning this script with the --results option.")
+        
 
     print >> args.log, "Output from HMMPileUp.py"
     print >> args.log, "Run on", datetime.now()
@@ -104,7 +118,27 @@ if __name__ == "__main__":
     
     if os.path.isdir(args.results):
         for files, program in getHMMOutputFromDirectory(args.results):
-            result = run(files, args.reference_data, program=program, filter_percentX=args.filter_percentX, filter_spanX=args.filter_spanX, filter_percentChar=args.filter_percentChar, filter_evalue=args.filter_evalue)
+            result = run(
+                files, 
+                args.reference_data, 
+                program=program, 
+                filter_percentX=args.filter_percentX, 
+                filter_spanX=args.filter_spanX, 
+                filter_percentChar=args.filter_percentChar, 
+                filter_evalue=args.filter_evalue
+                )
             print >> args.log, program, files[0]
-            print >> args.log, "  Total sequences:", result.total_seqs
-            print >> args.log, "  Saved sequences:", len(result.records)
+    elif args.database is not None:
+        for (train, search), files in HMMPipeline.run(args.reference_data, args.database):
+            result = run(
+                files, 
+                args.reference_data, 
+                program=search, 
+                filter_percentX=args.filter_percentX, 
+                filter_spanX=args.filter_spanX, 
+                filter_percentChar=args.filter_percentChar, 
+                filter_evalue=args.filter_evalue
+                )
+            print >> args.log, search, files[0]
+    print >> args.log, "  Total sequences:", result.total_seqs
+    print >> args.log, "  Saved sequences:", len(result.records)

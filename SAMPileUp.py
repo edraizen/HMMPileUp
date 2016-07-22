@@ -83,12 +83,15 @@ class SAMPileUp(HMMPileUp):
             header_match = seqIDregex.search(s.id)
             seqID = header_match.groups()[0]
             origSeqLength = header_match.groups()[1]
-            seq = SAMSequence(s.seq, self.hmmLength, origSeqLength, evalues[s.id])
-            seq.align()
-            seq.determineGapPositions()
 
             seqFrom = header_match.groups()[2]
             seqTo = header_match.groups()[3]
+
+            seq = SAMSequence(s.seq, self.hmmLength, origSeqLength, evalues[s.id], seqFrom, seqTo)
+            seq.align()
+            seq.determineGapPositions()
+
+            
 
             _id = "%d_%s" % (i+1, seqID)
             _id = "{}_{}".format(i+1, seqID)
@@ -144,7 +147,7 @@ class SAMSequence(HMMSequence):
             end = "X"*len(endLowers)
             end += "-"*(len(endDashes)-len(endLowers))
 
-        self.hmm_start = frontLowers
-        self.hmm_end = len(self)-len(endLowers)+1
+        self.hmmStart = len(frontLowers)
+        self.hmmEnd = len(self)-len(endLowers)+1
 
         self.data = MutableSeq("{}{}{}".format(begin, matchedSeq, end)).data
