@@ -10,7 +10,7 @@ from datetime import datetime
 from subprocess import Popen, PIPE
 
 #Custom libraries
-from HMMPipeline import HMMPipeline
+import HMMPipeline
 from HMMERPileUp import HMMERPileUp, is_hmmer_hmmsearch_file
 from SAMPileUp import SAMPileUp, is_sam_output_directory
 
@@ -29,8 +29,8 @@ def run(files, reference_data, program="hmmer", filter_percentX=None, filter_spa
     #parser.Write2File()
     return parser
 
-def run_with_hmm(reference_data, database, filter_percentX=None, filter_spanX=None, filter_percentChar=None, filter_evalue=None):
-    for (train, search), files in HMMPipeline.run(reference_data, database):
+def run_with_hmm(reference_data, database, output=None, path=None, filter_percentX=None, filter_spanX=None, filter_percentChar=None, filter_evalue=None):
+    for (train, search), files in HMMPipeline.run(reference_data, database, output=output, path=path):
         result = run(
             files, 
             args.reference_data, 

@@ -1,18 +1,8 @@
 # Performs HMMER/SAM model mixtures
 # Edward Liaw 5/7/11
 
-import sys
+import os, sys
 from subprocess import Popen
-
-# Program paths
-HMMBUILD  = $(BIN)/hmmbuild
-HMMSCORE  = $(BIN)/hmmsearch
-SAMBUILD  = $(BIN)/modelfromalign
-SAMSCORE  = $(BIN)/hmmscore
-HMMCONV   = $(BIN)/hmmconvert
-SAMCONV   = $(BIN)/convert
-LOGO      = $(BIN)/makelogo
-PDF       = ps2pdf12
 
 # Options
 options = {
@@ -26,75 +16,83 @@ options = {
 	}
 }
 
-def run(reference_data, search_data, path=""):
+def run(reference_data, search_data, output=None, path=None):
 	#Path to results files, keyesd by (train program, search program)
-	self.results = {
-		("hmmer", "hmmer"):"", 
-		("hmmer", "sam"):"",
-		("sam",   "hmmer"):"", 
-		("sam",   "sam"):""
-	}
-
-	hmmer = HMM("hmmer", self.reference_data, path=path)
-	sam   = HMM("sam", self.reference_data, path=path)
+	hmmer = HMM("hmmer", reference_data, output=output, path=path)
+	sam   = HMM("sam", reference_data, output=output, path=path)
 	sam_hmmer = sam.convert()
 	hmmer_sam = hmmer.convert()
 
-	yield ("hmmer", "hmmer"), hmmer.search(self.reference_data)
-	yield ("sam",   "hmmer")], sam_hmmer.search(self.reference_data)
-	yield ("sam",   "sam")], sam.search(self.reference_data)
-	yield ("hmmer", "sam")], hmmer_sam.search(self.reference_data)
+	yield ("hmmer", "hmmer"), hmmer.search(reference_data)
+	yield ("sam",   "hmmer"), sam_hmmer.search(reference_data)
+	yield ("sam",   "sam"), sam.search(reference_data)
+	yield ("hmmer", "sam"), hmmer_sam.search(reference_data)
 
 class HMM(object):
-	def __init__(self, name, reference_data, model_file=None, calibrate_sam=True, path=""):
+	def __init__(self, program, reference_data, model_file=None, name=None, calibrate_sam=True, output=None, path=""):
 		"""Train an HMM"""
-		assert name in ["hmmer", "sam"]
-		self.name = name
+		assert program.endswith("hmmer") or program.endswith("sam")
+		self.program = program
 		self.reference_data = reference_data
 		self.model_file = model_file
 		self.results_file = ""
+		self.path = os.path.join(os.sep, "web", "public", "data", "projects", "6CysDB", "bin")
+		self.output = output or os.getcwd()
+
+		self.name = name or os.path.splitext(os.path.basename(reference_data))[0]
 
 		#Train the HMM if no model file is given
 		if self.model_file is None:
-			if name.endswith("hmmer"):
-				#$(HMMBUILD) $(HMMFORMAT) $@ $(DATA)/$*$(FORMAT)
-				self.model_file = "{}_{}.hmm".format(self.name, reference_data)
-				options = [str(item) for opt in options["hmmer"]["build"].items() for item in opt]
-				process = Popen([os.path.join(self.path, "hmmbuild"), *options, self.model_file, self.reference_data])
-			elif name.endswith("sam"):
-				#$(SAMBUILD) $*_sam -alignfile $(DATA)/$*$(FORMAT)
-				self.model_file = "{}_{}.mod".format(self.name, reference_data)
-				options = " ".join([str(item) for opt in options["sam"]["build"].items() for item in opt])
-				process = Popen([os.path.join(self.path, "modelfromalign"), self.name, "-alignfile", self.reference_data, *options])
+			self.model_file = os.path.join(
+				self.output,
+				"{}_{}".format(self.name, self.program)
+			)
+			if program.endswith("hmmer"):
+				self.model_file += ".hmm"
+				cmd = [os.path.join(self.path, "hmmbuild")]
+				cmd += [str(item) for opt in options["hmmer"]["build"].items() for item in opt]
+				cmd += [self.model_file, self.reference_data]
+			elif program.endswith("sam"):
+				self.model_file += ".mod"
+				cmd = [os.path.join(self.path, "modelfromalign"), self.model_file[:-4], "-alignfile", self.reference_data]
+				cmd += [str(item) for opt in options["sam"]["build"].items() for item in opt]
 			else:
 				raise RuntimeErrot("Invalid hmm name")
 
-		process.communicate()
+			print " ".join(cmd)
+			process = Popen(cmd)
+			process.communicate()
+			process.wait()
 
-		if self.name.endswith("sam") and calibrate_sam:
+		if self.program.endswith("sam") and calibrate_sam:
 			self.calibrate()
 
-	def search(search_data):
+	def search(self, search_data):
 		""""""
 		if self.name.endswith("hmmer"):
 			#$(HMMSCORE) $(HMMOPTS) -o $@.out $^ $(APIDB)
-			self.results_file = "{}.out".format(os.path.splitext(os.path.basename(self.reference_data))[0])
-			options = [str(item) for opt in options["hmmer"]["search"].items() for item in opt]
-			process = Popen([os.path.join(self.path, "hmmsearch"), *options, "-o", self.results_file, self.model_file, search_data])
+			self.results_file = "{}.out".format(self.model_file[:-4])
+			cmd = [os.path.join(self.path, "hmmsearch")]
+			cmd += [str(item) for opt in options["hmmer"]["search"].items() for item in opt]
+			cmd += ["-o", self.results_file, self.model_file, search_data]
+			
 		elif self.name.endswith("sam"):
 			#$(SAMSCORE) $@ -i $^ -db $(APIDB) $(SAMOPTS)
-			self.results_file = ["{}.{}".format(os.path.splitext(os.path.basename(self.reference_data))[0], ext) for ext in ("dist", "mstat", "mult")]
-			options = [str(item) for opt in options["sam"]["search"].items() for item in opt]
-			process = Popen([os.path.join(self.path, "hmmscore"), self.name, "-i", self.model_file, "-db", search_data, *options])
+			self.results_file = ["{}.{}".format(self.model_file, ext) \
+				for ext in ("dist", "mstat", "mult")]
+			cmd = [os.path.join(self.path, "hmmscore"), self.model_file[:-4], "-i", self.model_file, "-db", search_data]
+			cmd += [str(item) for opt in options["sam"]["search"].items() for item in opt]
 
+		process = Popen(cmd)
 		process.communicate()
+		process.wait()
 
 		return self.results_file
 
 	def convert(self):
-		if self.name.endswith("hmmer"):
+		if self.program.endswith("hmmer"):
 			#Convert hmmer to sam
-			new_name = "{}_hmmer".format(self.name)
+			new_name = "hmmer2{}".format(self.program)
 			new_model = "{}_{}.mod".format(self.reference_data, new_name)
 			hmmer2_file = "{}.hmm".format(new_name)
 			with open(hmmer2_file) as hmmer2:
@@ -105,22 +103,24 @@ class HMM(object):
 			os.remove(hmmer2_file)
 			#SAM convert renames file to have .con.asc.mod extension
 			os.rename("{}.con.asc.mod".format(new_name), new_model)
-		elif self.name.endswith("sam"):
+		elif self.program.endswith("sam"):
 			#Convert sam to hmmer
-			new_name = "{}_sam".format(self.name)
+			new_name = "sam2{}".format(self.program)
 			new_model = "{}_{}.hmm".format(self.reference_data, new_name)
 			# Conversion script requires .asc.mod extension
 			from shutil import copy
 			sam_rename = "{}_{}.asc.mod".format(self.reference_data, new_name)
 			copy(self.model_file, sam_rename)
-			process = Popen([os.path.join(self.path, "convert"), sam_rename])
+			process = Popen([os.path.join(self.path, "hmmconvertSAM"), sam_rename])
 			process.wait()
-			os.rename(sam_rename)
+			os.remove(sam_rename)
 			os.rename("{}.con.asc.hmm".format(new_name), new_model)
+		else:
+			raise RuntimeError("Must be a hmmer or sam model")
 
 		return HMM(new_name, self.reference_data, model_file=new_model, path=self.path)
 
-	def calibrate(num_sequences=1):
+	def calibrate(self, num_sequences=1):
 		"""Calibrate SAM models. HMMER automatically does this. From the SAM
 		documentation"
 
@@ -177,5 +177,5 @@ class HMM(object):
 		num_sequences : int
 			Number of random sequences to use from datbase. If 1, the entire database is used.
 		"""
-		process = Popen([os.path.join(self.path, "hmmscore"), self.name, "-modelfile", self.model_file, "-calibrate", num_sequences])
+		process = Popen([os.path.join(self.path, "hmmscore"), self.name, "-modelfile", self.model_file, "-calibrate", str(num_sequences)])
 		process.communicate()
