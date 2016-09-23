@@ -1,6 +1,6 @@
 # HMMPileUP
 
-Perform HMMER and UCSC-SAM model mixtures, saving the the results into a pile up. The sequences that have scores above a given thershold are dispayed with the portions that aligned to the HMM. Unknowns are filled in with X's in the front and end if sequence started or ended in the middle of the hmm. Next, gaps are calculated for all positions of the hmm in each sequence, and are reinserted into all sequences as dashes with appropriate lengths to make sure they are aligned. This work was done in Dietlind L. Gerloff's Lab at UCSC (2010-2013) and updated April 2015 for our upcomming paper.
+Perform HMMER and UCSC-SAM model mixtures, saving the the results into a pile up. The sequences that have scores above a given thershold are dispayed with the portions that aligned to the HMM. Unknowns are filled in with X's in the front and end if sequence started or ended in the middle of the hmm. Next, gaps are calculated for all positions of the hmm in each sequence, and are reinserted into all sequences as dashes with appropriate lengths to make sure they are aligned. This work began in Dietlind L. Gerloff's (Ffame/UCSC) and is being continued for my PhD with Phil E. Bourne (NIH/NLM/NCBI) and Michael E. Grigg (NIH/UCSC).
 
 ## Requirements
 * python2.7
